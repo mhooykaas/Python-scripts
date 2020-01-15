@@ -62,7 +62,8 @@ Extracts DNA or protein sequences of specified [genes] from genbank files. Write
 Example call: $ python extract_dna_or_protein_seq_from_genbank_batch_commandline.py -folder /d/genbankfiles/ -genes ["RecA","recombinase A"] -format DNA --filename
 """, formatter_class=RawTextHelpFormatter)
 parser.add_argument('-folder',    help='location of genbank files to be parsed',   required  = True)
-parser.add_argument('-genes',    help='provide bracketed list of gene names to search by (NB: list should contain >1 name), eg ["RecA","recombinase A"]', required  = True)
+#parser.add_argument('-genes',    help='provide bracketed list of gene names to search by (NB: list should contain >1 name), eg ["RecA","recombinase A"]', required  = True)
+parser.add_argument('-genes',    help='provide text file containing a list of gene names to search for (NB: list should contain >1 name), eg RecA, recombinase A (on different lines)', required  = True)
 parser.add_argument('-format', choices=['DNA', 'protein'], help='output format: DNA or protein', required  = True)
 parser.add_argument('-f', '--filename', action='store_true', help='whether to include genbank filename in fasta names (not compatible with -s)')
 parser.add_argument('-s' , '--short_names', action='store_true', help='whether to make fasta names extra short')
@@ -70,7 +71,10 @@ args = vars(parser.parse_args())
 
 folder    = args['folder']
 genes    = args['genes']
-genes = genes[1:-1].split(',')
+#genes = genes[1:-1].split(',') # this does not always work, therefore switch to reading in a file with a list of names
+# removed help='provide bracketed list of gene names to search by (NB: list should contain >1 name), eg ["RecA","recombinase A"]', required  = True)
+genes = [line.rstrip('\n') for line in open(genes)]
+print(genes)
 
 write_type = args['format']
 
@@ -101,7 +105,10 @@ for input_file in os.listdir(folder):
         if args['filename']:
             addition = f"{input_file} | "
         for rec in SeqIO.parse(input_file, "gb"): # calls the record for the genbank file and SeqIO (BioPython module) to parse it
-            organism = rec.annotations['organism'] # defines your organism ID
+            try:
+                organism = rec.annotations['organism'] # defines your organism ID
+            except:
+                organism = 'unknown organism'
             try:
                 acc = rec.annotations['accessions'][0] # accession numbers given in Rast genbank, but not prokka genbank -> try:except statement required
             except:
@@ -109,7 +116,7 @@ for input_file in os.listdir(folder):
             for feature in rec.features: # parse all features in the genbank file
                 if feature.type in ['CDS','rRNA','tRNA']:  # only check CDS, rRNA, tRNA features and skip 'gene' because it seems to be redundant (and never contains translation key)
                     for gene in genes: # look for all provided gene names    
-                        descriptions = [feature.qualifiers.get('gene',[""])[0],feature.qualifiers.get('product',[""])[0]] # either in gene or product field; however, one or both fields may not exist -> with dict.get method avoid many if statements, provide default ("") in case of not found
+                        descriptions = [feature.qualifiers.get('gene',[""])[0],feature.qualifiers.get('product',[""])[0]] # optionally change product to note #either in gene or product field; however, one or both fields may not exist -> with dict.get method avoid many if statements, provide default ("") in case of not found
                         for description in descriptions:
                             #if gene in description.lower() and (not ("like" or "family" or "superfamily") in description): # try to filter out bad hits by discarding those with 'like'or 'family' (assume these hits are similar but not orthologs) 
                             if gene in description.lower() and not(True in [x in description.lower() for x in ["like","family"]]): #try to filter out bad hits by discarding those with 'like'or 'family' (assume these hits are similar but not orthologs) 
